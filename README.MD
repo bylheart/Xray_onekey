@@ -6,6 +6,7 @@
 
 > Thanks for non-commercial open source development authorization by JetBrains!
 
+
 ### Telegram 群组
 * Telegram 交流群：https://t.me/wulabing_v2ray 
 * Telegram 更新公告频道：https://t.me/wulabing_channel
@@ -13,6 +14,11 @@
 ### 准备工作
 * 准备一个域名，并将 A 记录添加好；
 * 安装好 wget。
+
+### 导入链接规范
+https://github.com/XTLS/Xray-core/issues/91
+
+> 截止 2021-2-24 仅有 V2RayN 4.12+ 及 V2RayNG 1.5.8+ 支持链接及二维码导入
 
 ### 支持配置方式
 VLESS + TCP + XTLS / TLS  + Nginx
@@ -74,4 +80,4 @@ https://bandwagonhost.com/aff.php?aff=63939
 
 ## Stargazers over time
 
-[![Stargazers over time](https://starchart.cc/wulabing/V2Ray_ws-tls_bash_onekey.svg)](https://starchart.cc/wulabing/V2Ray_ws-tls_bash_onekey)
+[![Stargazers over time](https://starchart.cc/wulabing/Xray_onekey.svg)](https://starchart.cc/wulabing/Xray_onekey)

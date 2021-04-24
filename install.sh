@@ -7,6 +7,9 @@
 #	email: admin@wulabing.com
 #====================================================
 
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+stty erase ^?
+
 cd "$(
   cd "$(dirname "$0")" || exit
   pwd
@@ -24,9 +27,8 @@ OK="${Green}[OK]${Font}"
 ERROR="${Red}[ERROR]${Font}"
 
 # 变量
-shell_version="1.2.3"
+shell_version="1.2.8"
 github_branch="main"
-version_cmp="/tmp/version_cmp.tmp"
 xray_conf_dir="/usr/local/etc/xray"
 website_dir="/www/xray_web/"
 xray_access_log="/var/log/xray/access.log"
@@ -89,7 +91,7 @@ function system_check() {
     INS="apt install -y"
     # 清除可能的遗留问题
     rm -f /etc/apt/sources.list.d/nginx.list
-    $INS lsb-release
+    $INS lsb-release gnupg2
 
     echo "deb http://nginx.org/packages/debian $(lsb_release -cs) nginx" >/etc/apt/sources.list.d/nginx.list
     curl -fsSL https://nginx.org/keys/nginx_signing.key | sudo apt-key add -
@@ -100,7 +102,7 @@ function system_check() {
     INS="apt install -y"
     # 清除可能的遗留问题
     rm -f /etc/apt/sources.list.d/nginx.list
-    $INS lsb-release
+    $INS lsb-release gnupg2
 
     echo "deb http://nginx.org/packages/ubuntu $(lsb_release -cs) nginx" >/etc/apt/sources.list.d/nginx.list
     curl -fsSL https://nginx.org/keys/nginx_signing.key | sudo apt-key add -
@@ -134,8 +136,8 @@ function nginx_install() {
   fi
 }
 function dependency_install() {
-  ${INS} wget lsof
-  judge "安装 wget lsof"
+  ${INS} wget lsof tar
+  judge "安装 wget lsof tar"
 
   if [[ "${ID}" == "centos" ]]; then
     ${INS} crontabs
@@ -203,7 +205,7 @@ function domain_check() {
   read -rp "请输入你的域名信息(eg: www.wulabing.com):" domain
   domain_ip=$(ping "${domain}" -c 1 | sed '1{s/[^(]*(//;s/).*//;q}')
   print_ok "正在获取 IP 地址信息，请耐心等待"
-  local_ip=$(curl https://api-ipv4.ip.sb/ip)
+  local_ip=$(curl -4 ip.sb)
   echo -e "域名通过 DNS 解析的 IP 地址：${domain_ip}"
   echo -e "本机公网 IP 地址： ${local_ip}"
   sleep 2
@@ -242,9 +244,7 @@ function port_exist_check() {
 }
 function update_sh() {
   ol_version=$(curl -L -s https://raw.githubusercontent.com/wulabing/Xray_onekey/${github_branch}/install.sh | grep "shell_version=" | head -1 | awk -F '=|"' '{print $3}')
-  echo "$ol_version" >$version_cmp
-  echo "$shell_version" >>$version_cmp
-  if [[ "$shell_version" != "$(sort -rV $version_cmp | head -1)" ]]; then
+  if [[ "$shell_version" != "$(echo -e "$shell_version\n$ol_version" | sort -rV | head -1)" ]]; then
     print_ok "存在新版本，是否更新 [Y/N]?"
     read -r update_confirm
     case $update_confirm in
@@ -439,13 +439,10 @@ function ssl_judge_and_install() {
 }
 
 function generate_certificate() {
-  openssl genrsa -des3 -passout pass:xxxx -out server.pass.key 2048
-  openssl rsa -passin pass:xxxx -in server.pass.key -out "$cert_dir/self_signed_key.pem"
-  rm -rf server.pass.key
-  openssl req -new -key "$cert_dir/self_signed_key.pem" -out server.csr -subj "/CN=$local_ip"
-  openssl x509 -req -days 3650 -in server.csr -signkey "$cert_dir/self_signed_key.pem" -out "$cert_dir/self_signed_cert.pem"
-  rm -rf server.csr
-  [[ ! -f "$cert_dir/self_signed_cert.pem" || ! -f "$cert_dir/self_signed_key.pem" ]] && print_error "生成自签名证书失败"
+  signedcert=$(xray tls cert -domain="$local_ip" -name="$local_ip" -org="$local_ip" -expire=87600h)
+  echo $signedcert | jq '.certificate[]' | sed 's/\"//g' | tee $cert_dir/self_signed_cert.pem
+  echo $signedcert | jq '.key[]' | sed 's/\"//g' > $cert_dir/self_signed_key.pem
+  openssl x509 -in $cert_dir/self_signed_cert.pem -noout || print_error "生成自签名证书失败"
   print_ok "生成自签名证书成功"
   chown nobody.$cert_group $cert_dir/self_signed_cert.pem
   chown nobody.$cert_group $cert_dir/self_signed_key.pem
@@ -454,8 +451,7 @@ function generate_certificate() {
 function configure_web() {
   rm -rf /www/xray_web
   mkdir -p /www/xray_web
-  # 该处保留引用源
-  wget -O web.tar.gz https://github.com/jiuqi9997/xray-yes/raw/main/web.tar.gz
+  wget -O web.tar.gz https://raw.githubusercontent.com/wulabing/Xray_onekey/main/basic/web.tar.gz
   tar xzf web.tar.gz -C /www/xray_web
   judge "站点伪装"
   rm -f web.tar.gz
@@ -487,8 +483,8 @@ function vless_xtls-rprx-direct_link() {
 
   print_ok "URL 链接（VLESS + TCP +  XTLS）"
   print_ok "vless://$UUID@$DOMAIN:$PORT?security=xtls&flow=$FLOW#XTLS_wulabing-$DOMAIN"
-
-  print_ok "URL 二维码（VLESS + TCP + XTLS）（请在浏览器中访问）"
+  print_ok "-------------------------------------------------"
+  print_ok "URL 二维码（VLESS + TCP + TLS）（请在浏览器中访问）"
   print_ok "https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=vless://$UUID@$DOMAIN:$PORT?security=tls%26flow=$FLOW%23TLS_wulabing-$DOMAIN"
 
   print_ok "URL 二维码（VLESS + TCP + XTLS）（请在浏览器中访问）"
@@ -646,9 +642,10 @@ menu() {
   #    echo -e "${Green}23.${Font}  查看 V2Ray 配置信息"
   echo -e "—————————————— 其他选项 ——————————————"
   echo -e "${Green}31.${Font} 安装 4 合 1 BBR、锐速安装脚本"
-  echo -e "${Green}32.${Font} 安装 MTproxy（支持 TLS 混淆）"
+  echo -e "${Yellow}32.${Font} 安装 MTproxy(不推荐使用,请相关用户关闭或卸载)"
   echo -e "${Green}33.${Font} 卸载 Xray"
   echo -e "${Green}34.${Font} 更新 Xray-core"
+  echo -e "${Green}35.${Font} 安装 Xray-core 测试版(Pre)"
   echo -e "${Green}40.${Font} 退出"
   read -rp "请输入数字：" menu_num
   case $menu_num in
@@ -716,7 +713,11 @@ menu() {
     xray_uninstall
     ;;
   34)
-    curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh | bash -s -- install
+    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" - install
+    restart_all
+    ;;
+  35)
+    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" - install --beta
     restart_all
     ;;
   40)
